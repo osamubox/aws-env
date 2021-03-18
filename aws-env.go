@@ -24,6 +24,7 @@ func main() {
 
 	recursivePtr := flag.Bool("recursive", false, "recursively process parameters on path")
 	format := flag.String("format", formatExports, "output format")
+	nullstring := flag.String("nullstring", formatExports, "specify null-string")
 	flag.Parse()
 
 	if *format == formatExports || *format == formatDotenv {
@@ -34,7 +35,7 @@ func main() {
 	sess := CreateSession()
 	client := CreateClient(sess)
 
-	ExportVariables(client, os.Getenv("AWS_ENV_PATH"), *recursivePtr, *format, "")
+	ExportVariables(client, os.Getenv("AWS_ENV_PATH"), *recursivePtr, *format, *nullstring,  "")
 }
 
 func CreateSession() *session.Session {
@@ -45,7 +46,7 @@ func CreateClient(sess *session.Session) *ssm.SSM {
 	return ssm.New(sess)
 }
 
-func ExportVariables(client *ssm.SSM, path string, recursive bool, format string, nextToken string) {
+func ExportVariables(client *ssm.SSM, path string, recursive bool, format string, nullstring string, nextToken string) {
 	input := &ssm.GetParametersByPathInput{
 		Path:           &path,
 		WithDecryption: aws.Bool(true),
@@ -63,20 +64,23 @@ func ExportVariables(client *ssm.SSM, path string, recursive bool, format string
 	}
 
 	for _, element := range output.Parameters {
-		OutputParameter(path, element, format)
+		OutputParameter(path, element, format, nullstring)
 	}
 
 	if output.NextToken != nil {
-		ExportVariables(client, path, recursive, format, *output.NextToken)
+		ExportVariables(client, path, recursive, format, nullstring, *output.NextToken)
 	}
 }
 
-func OutputParameter(path string, parameter *ssm.Parameter, format string) {
+func OutputParameter(path string, parameter *ssm.Parameter, format string, nullstring string) {
 	name := *parameter.Name
 	value := *parameter.Value
 
 	env := strings.Replace(strings.Trim(name[len(path):], "/"), "/", "_", -1)
 	value = strings.Replace(value, "\n", "\\n", -1)
+	if nullstring != "" {
+		value = strings.Replace(value, nullstring, "", -1)
+	}
 
 	switch format {
 	case formatExports:
